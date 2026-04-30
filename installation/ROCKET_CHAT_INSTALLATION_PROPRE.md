@@ -208,6 +208,11 @@ services:
       MONGO_URL: mongodb://mongodb:27017/rocketchat?replicaSet=rs0
       MONGO_OPLOG_URL: mongodb://mongodb:27017/local?replicaSet=rs0
       DEPLOY_METHOD: docker
+      INITIAL_USER: yes
+      ADMIN_USERNAME: admin
+      ADMIN_NAME: Administrateur RocketChat
+      ADMIN_EMAIL: admin@example.local
+      ADMIN_PASS: "Admin123456789!"
       OVERWRITE_SETTING_Setup_Wizard: completed
       OVERWRITE_SETTING_Show_Setup_Wizard: completed
     ports:
@@ -254,18 +259,42 @@ Variables importantes :
 ROOT_URL: http://ADRESSE_IP_DU_SERVEUR:3000
 MONGO_URL: mongodb://mongodb:27017/rocketchat?replicaSet=rs0
 MONGO_OPLOG_URL: mongodb://mongodb:27017/local?replicaSet=rs0
+DEPLOY_METHOD: docker
+INITIAL_USER: yes
+ADMIN_USERNAME: admin
+ADMIN_NAME: Administrateur RocketChat
+ADMIN_EMAIL: admin@example.local
+ADMIN_PASS: "Admin123456789!"
+OVERWRITE_SETTING_Setup_Wizard: completed
+OVERWRITE_SETTING_Show_Setup_Wizard: completed
 ```
 
-La variable `ROOT_URL` définit l'adresse utilisée pour accéder à Rocket.Chat.
+- `ROOT_URL` définit l'adresse utilisée pour accéder à Rocket.Chat.
+- `MONGO_URL` et `MONGO_OPLOG_URL` permettent à Rocket.Chat de communiquer avec MongoDB.
+- `DEPLOY_METHOD: docker` indique que Rocket.Chat est exécuté depuis Docker.
 
-Les variables `MONGO_URL` et `MONGO_OPLOG_URL` permettent à Rocket.Chat de communiquer avec MongoDB.
+### Création automatique du compte administrateur
 
-Les variables suivantes permettent d'éviter l'assistant d'enregistrement Rocket.Chat Cloud dans un contexte de test local :
+Les variables suivantes créent automatiquement le premier compte administrateur lors de la première initialisation de Rocket.Chat sur une base MongoDB neuve :
+
+```yaml
+INITIAL_USER: yes
+ADMIN_USERNAME: admin
+ADMIN_NAME: Administrateur RocketChat
+ADMIN_EMAIL: admin@example.local
+ADMIN_PASS: "Admin123456789!"
+```
+
+### Contournement de l'assistant de configuration Cloud
+
+Les variables suivantes indiquent à Rocket.Chat que l'assistant de configuration est déjà terminé :
 
 ```yaml
 OVERWRITE_SETTING_Setup_Wizard: completed
 OVERWRITE_SETTING_Show_Setup_Wizard: completed
 ```
+
+Ces variables permettent de réduire les étapes de configuration initiale et d'éviter, dans un environnement local ou de test, l'écran d'enregistrement Rocket.Chat Cloud.
 
 ---
 
@@ -430,6 +459,70 @@ Configuration update
 ```
 
 Ne pas cliquer sur `New workspace`.
+
+---
+
+## Dépannage complémentaire : Rocket.Chat demande encore l'enregistrement Cloud
+
+### Problème
+
+Rocket.Chat peut afficher encore :
+
+```text
+Étape 3 sur 4 - Enregistrer votre serveur
+E-mail du compte cloud
+Register workspace
+```
+
+Ce comportement peut se produire même si les variables `OVERWRITE_SETTING_Setup_Wizard: completed` et `OVERWRITE_SETTING_Show_Setup_Wizard: completed` sont présentes, lorsque l'état du setup a déjà été enregistré dans MongoDB.
+
+### Solution
+
+1. Ouvrir une session MongoDB dans le conteneur :
+
+```bash
+docker exec -it rocketchat-mongodb mongosh
+```
+
+2. Sélectionner la base de données Rocket.Chat :
+
+```javascript
+use rocketchat
+```
+
+3. Forcer l'état du setup comme terminé :
+
+```javascript
+db.rocketchat_settings.updateOne(
+  { _id: "Show_Setup_Wizard" },
+  { $set: { value: "completed" } },
+  { upsert: true }
+)
+
+db.rocketchat_settings.updateOne(
+  { _id: "Setup_Wizard" },
+  { $set: { value: "completed" } },
+  { upsert: true }
+)
+```
+
+4. Quitter :
+
+```text
+.exit
+```
+
+5. Redémarrer Rocket.Chat :
+
+```bash
+docker compose restart rocketchat
+```
+
+6. Accéder ensuite à :
+
+```text
+http://ADRESSE_IP_DU_SERVEUR:3000/home
+```
 
 ---
 
